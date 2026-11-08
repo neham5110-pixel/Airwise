@@ -1,0 +1,7 @@
+streamlit
+pandas
+numpy
+joblib
+requests
+anthropic
+scikit-learn==1.6.1
