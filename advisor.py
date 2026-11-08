@@ -12,8 +12,7 @@ from typing import NamedTuple
 
 from features import pm_category
 
-DEFAULT_MODELS = {"anthropic": "claude-haiku-5-5", "openai": "gpt-4o-mini"}
-DEFAULT_MODEL = DEFAULT_MODELS["anthropic"]  # kept for backward compatibility
+DEFAULT_MODEL = "claude-haiku-5-5"  # change here (or via app secret LLM_MODEL) to use another model
 LANGS = {"en": "English", "ur": "Urdu"}
 
 DISCLAIMER = {
@@ -94,28 +93,7 @@ def reply_is_safe(text, allowed_numbers, language):
 
 
 # --------------------------------------------------------------------- LLM call
-def _call_llm(system, user, api_key, model, provider="anthropic", max_tokens=300):
-    """One function to change if you want another provider."""
-    if provider == "openai":
-        import requests
-
-        r = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                "temperature": 0.2,
-                "max_tokens": max_tokens,
-            },
-            timeout=20,
-        )
-        r.raise_for_status()
-        return r.json()["choices"][0]["message"]["content"].strip()
-
+def _call_llm(system, user, api_key, model, max_tokens=300):
     import anthropic  # imported here so the app still runs without a key / package
 
     client = anthropic.Anthropic(api_key=api_key, timeout=20.0)
@@ -128,7 +106,7 @@ def _call_llm(system, user, api_key, model, provider="anthropic", max_tokens=300
     return "".join(b.text for b in msg.content if b.type == "text").strip()
 
 
-def get_advisory(forecast, language="en", api_key=None, model=None, provider="anthropic"):
+def get_advisory(forecast, language="en", api_key=None, model=DEFAULT_MODEL):
     """Main feature: forecast number -> short plain-language advice."""
     category = pm_category(forecast)
     value = int(round(forecast))
@@ -141,7 +119,7 @@ def get_advisory(forecast, language="en", api_key=None, model=None, provider="an
         f"Language: {LANGS[language]}."
     )
     try:
-        text = _call_llm(ADVISORY_SYSTEM, user, api_key, model or DEFAULT_MODELS[provider], provider)
+        text = _call_llm(ADVISORY_SYSTEM, user, api_key, model)
         if reply_is_safe(text, {value}, language):
             return Advisory(text, "ai", category)
     except Exception:
@@ -149,7 +127,7 @@ def get_advisory(forecast, language="en", api_key=None, model=None, provider="an
     return fallback
 
 
-def answer_question(question, context, language="en", api_key=None, model=None, provider="anthropic"):
+def answer_question(question, context, language="en", api_key=None, model=DEFAULT_MODEL):
     """Optional feature: answer ONLY from the data/model output we supply."""
     sorry = {
         "en": "Sorry, I can't answer that right now.",
@@ -160,7 +138,7 @@ def answer_question(question, context, language="en", api_key=None, model=None, 
         return sorry
     user = f"CONTEXT:\n{context}\n\nQUESTION: {question}\nLanguage: {LANGS[language]}."
     try:
-        text = _call_llm(QA_SYSTEM, user, api_key, model or DEFAULT_MODELS[provider], provider)
+        text = _call_llm(QA_SYSTEM, user, api_key, model)
         if reply_is_safe(text, numbers_in(context), language):
             return text
     except Exception:
